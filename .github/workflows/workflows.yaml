@@ -21,7 +21,7 @@ jobs:
 
       - name: Terraform Init & Apply
         run: |
-          cd terraform
+          cd Terraform
           terraform init
           terraform apply -auto-approve
           EC2_IP=$(terraform output -raw ec2_ip)
@@ -47,7 +47,7 @@ jobs:
           EOF
 
           # 4. Copy Website Files
-          scp -o StrictHostKeyChecking=no -i MyEC2.pem -r app/* ec2-user@${{ env.EC2_IP }}:/tmp/
+          scp -o StrictHostKeyChecking=no -i MyEC2.pem -r App/* ec2-user@${{ env.EC2_IP }}:/tmp/
 
           # 5. Move Files to Web Directory
           ssh -o StrictHostKeyChecking=no -i MyEC2.pem ec2-user@${{ env.EC2_IP }} << 'EOF'
