@@ -19,25 +19,30 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+          terraform_wrapper: false # THIS IS KEY: It prevents extra text from breaking your IP variable
+
       - name: Terraform Init & Apply
         run: |
           cd Terraform
           terraform init
           terraform apply -auto-approve
+          # Extract the clean IP
           EC2_IP=$(terraform output -raw ec2_ip)
           echo "EC2_IP=$EC2_IP" >> $GITHUB_ENV
 
       - name: Deploy Website to EC2
         run: |
-          # 1. Prepare the Key
           echo "${{ secrets.EC2_KEY_PRIVATE }}" > MyEC2.pem
           chmod 600 MyEC2.pem
           
-          # 2. Wait for Instance Initialization
           echo "Waiting 30 seconds for EC2 and SSH to be ready..."
           sleep 30 
 
-          # 3. Install Nginx and Clean Root
+          # Install Nginx
           ssh -o StrictHostKeyChecking=no -i MyEC2.pem ec2-user@${{ env.EC2_IP }} << 'EOF'
             sudo yum update -y
             sudo amazon-linux-extras install nginx1 -y
@@ -46,10 +51,10 @@ jobs:
             sudo rm -rf /usr/share/nginx/html/*
           EOF
 
-          # 4. Copy Website Files
+          # Copy Files (Capital 'A' to match your folder)
           scp -o StrictHostKeyChecking=no -i MyEC2.pem -r App/* ec2-user@${{ env.EC2_IP }}:/tmp/
 
-          # 5. Move Files to Web Directory
+          # Move to Web Root
           ssh -o StrictHostKeyChecking=no -i MyEC2.pem ec2-user@${{ env.EC2_IP }} << 'EOF'
             sudo mv /tmp/* /usr/share/nginx/html/
             sudo chmod -R 755 /usr/share/nginx/html/
