@@ -1,0 +1,56 @@
+name: Deploy Static Website
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Terraform Init & Apply
+        run: |
+          cd terraform
+          terraform init
+          terraform apply -auto-approve
+          EC2_IP=$(terraform output -raw ec2_ip)
+          echo "EC2_IP=$EC2_IP" >> $GITHUB_ENV
+
+      - name: Deploy Website to EC2
+        run: |
+          # 1. Prepare the Key
+          echo "${{ secrets.EC2_KEY_PRIVATE }}" > MyEC2.pem
+          chmod 600 MyEC2.pem
+          
+          # 2. Wait for Instance Initialization
+          echo "Waiting 30 seconds for EC2 and SSH to be ready..."
+          sleep 30 
+
+          # 3. Install Nginx and Clean Root
+          ssh -o StrictHostKeyChecking=no -i MyEC2.pem ec2-user@${{ env.EC2_IP }} << 'EOF'
+            sudo yum update -y
+            sudo amazon-linux-extras install nginx1 -y
+            sudo systemctl start nginx
+            sudo systemctl enable nginx
+            sudo rm -rf /usr/share/nginx/html/*
+          EOF
+
+          # 4. Copy Website Files
+          scp -o StrictHostKeyChecking=no -i MyEC2.pem -r app/* ec2-user@${{ env.EC2_IP }}:/tmp/
+
+          # 5. Move Files to Web Directory
+          ssh -o StrictHostKeyChecking=no -i MyEC2.pem ec2-user@${{ env.EC2_IP }} << 'EOF'
+            sudo mv /tmp/* /usr/share/nginx/html/
+            sudo chmod -R 755 /usr/share/nginx/html/
+          EOF
